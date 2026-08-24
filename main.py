@@ -1,9 +1,30 @@
 import logging
 import asyncio
+import os
+from threading import Thread
+from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler, MessageHandler, filters
 )
+
+# ---------------------------------------------------------
+# FLASK KEEP-ALIVE SERVER (For Render Web Service)
+# ---------------------------------------------------------
+web_app = Flask(__name__)
+
+@web_app.route('/')
+def home():
+    return "USDT Giveaway Bot is Running 24/7!"
+
+def run_flask():
+    port = int(os.environ.get("PORT", 8080))
+    web_app.run(host='0.0.0.0', port=port)
+
+def keep_alive():
+    t = Thread(target=run_flask)
+    t.daemon = True
+    t.start()
 
 # ---------------------------------------------------------
 # BOT CONFIGURATION
@@ -11,25 +32,18 @@ from telegram.ext import (
 BOT_TOKEN = "8999949252:AAFajrj8WNlHWU9Px13VpltL2j1cPzyiPxY"
 BOT_USERNAME = "@Usdt_giveway_bot"
 
-# Admin IDs (Apna Telegram Numeric User ID yahan daalein)
-ADMIN_IDS = [123456789]  # Replace with your actual Telegram User ID
+ADMIN_IDS = [123456789]  # Replace with your numeric Telegram User ID
 
-# Channels Config
 MANDATORY_CHANNEL = "@nobitabanxunban"
 MANDATORY_CHANNEL_LINK = "https://t.me/nobitabanxunban"
 PRIVATE_CHANNEL_LINK = "https://t.me/+ckvWhC-ac90zZTk1"
 
-# Banner Images
 GIVEAWAY_PHOTO = "https://images.unsplash.com/photo-1621416894569-0f39ed31d247?w=1000"
 
-# Economic Settings
-MIN_WITHDRAW = 5.0      # USDT Threshold
-DAILY_BONUS = 0.05      # USDT
-REFERRAL_BONUS = 0.50   # USDT
+MIN_WITHDRAW = 5.0
+DAILY_BONUS = 0.05
+REFERRAL_BONUS = 0.50
 
-# ---------------------------------------------------------
-# DATABASE & LOGS
-# ---------------------------------------------------------
 users_db = {}
 withdrawal_requests = []
 
@@ -147,7 +161,7 @@ async def show_main_menu(message, name):
     await message.reply_text(text, parse_mode="Markdown", reply_markup=reply_markup)
 
 # ---------------------------------------------------------
-# MAIN KEYBOARD MENU HANDLERS
+# MENU & WITHDRAWAL HANDLERS
 # ---------------------------------------------------------
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -179,17 +193,9 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not users_db[user_id]["claimed_today"]:
             users_db[user_id]["balance"] += DAILY_BONUS
             users_db[user_id]["claimed_today"] = True
-            await update.message.reply_text(
-                f"🎉 *DAILY REWARD CLAIMED!* 🎉\n\n"
-                f"✅ Aapke account me *+{DAILY_BONUS:.2f} USDT* add kar diye gaye hain!\n"
-                f"⏰ Agla bonus 24 ghante baad milega.",
-                parse_mode="Markdown"
-            )
+            await update.message.reply_text("🎉 *DAILY REWARD CLAIMED!* 🎉\n\n✅ *+0.05 USDT* add ho gaya hai!", parse_mode="Markdown")
         else:
-            await update.message.reply_text(
-                "⏳ *Bonus Already Claimed!*\n\nAapne aaj ka bonus claim kar liya hai. Kal wapas aana! 🕒",
-                parse_mode="Markdown"
-            )
+            await update.message.reply_text("⏳ *Bonus Already Claimed!* Kal wapas aana.", parse_mode="Markdown")
 
     elif text == "🔗 Referral Link":
         ref_link = f"https://t.me/{BOT_USERNAME.replace('@', '')}?start={user_id}"
@@ -200,209 +206,94 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"🎁 *Reward Per Refer:* `{REFERRAL_BONUS:.2f} USDT` 💎\n"
             f"👥 *Your Total Referrals:* `{refs}`\n\n"
-            f"🔗 *Your Exclusive Invite Link:*\n"
-            f"`{ref_link}`\n\n"
-            f"📌 *Rules:* Friends ko share karein. Verify karne par instant `{REFERRAL_BONUS:.2f} USDT` milega!"
+            f"🔗 *Your Exclusive Invite Link:*\n`{ref_link}`"
         )
-        keyboard = [[InlineKeyboardButton("📢 Share With Friends", url=f"https://t.me/share/url?url={ref_link}&text=Join%20USDT%20Giveaway%20Bot%20and%20Earn%20Free%20USDT!")]]
+        keyboard = [[InlineKeyboardButton("📢 Share With Friends", url=f"https://t.me/share/url?url={ref_link}&text=Join%20USDT%20Giveaway%20Bot!")]]
         await update.message.reply_text(caption, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
 
     elif text == "⚙️ Set Wallet":
-        await update.message.reply_text(
-            "⚙️ *SET / UPDATE USDT ADDRESS*\n\n"
-            "Apna **USDT (TRC-20 / BEP-20)** Wallet Address send karein:\n"
-            "Example command: `/setwallet T9yD14Nj9j7xGzV16t5H2bV1...`",
-            parse_mode="Markdown"
-        )
+        await update.message.reply_text("⚙️ *SET WALLET*\n\nCommand send karein: `/setwallet YOUR_TRC20_ADDRESS`", parse_mode="Markdown")
 
     elif text == "💸 Premium Withdraw":
         bal = users_db[user_id]["balance"]
         wallet = users_db[user_id]["wallet"]
         
         if not wallet:
-            await update.message.reply_text(
-                "⚠️ *WALLET NOT SET!*\n\n"
-                "Pehle apna USDT Wallet set karein.\n"
-                "Command: `/setwallet YOUR_WALLET_ADDRESS`",
-                parse_mode="Markdown"
-            )
+            await update.message.reply_text("⚠️ *Wallet Not Set!* Pehle `/setwallet ADDRESS` daalein.", parse_mode="Markdown")
             return
 
         if bal < MIN_WITHDRAW:
             needed = MIN_WITHDRAW - bal
             refs_needed = int((needed // REFERRAL_BONUS) + (1 if needed % REFERRAL_BONUS != 0 else 0))
-            
-            kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔗 Invite Friends Now", callback_data="get_ref")]
-            ])
-            
             await update.message.reply_text(
-                f"❌ *WITHDRAWAL LOCK DETECTED!*\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"💳 *Current Balance:* `{bal:.4f} USDT`\n"
-                f"🎯 *Minimum Payout:* `{MIN_WITHDRAW:.2f} USDT`\n"
-                f"🔻 *Shortage:* `{needed:.4f} USDT`\n\n"
-                f"💡 *Kaise Unlock Karein?*\n"
-                f"Aapko bas *{refs_needed} aur refer* karne hain payout threshold unlock karne ke liye! 🚀",
-                parse_mode="Markdown",
-                reply_markup=kb
+                f"❌ *WITHDRAWAL LOCK DETECTED!*\n\n"
+                f"💳 *Balance:* `{bal:.4f} USDT`\n"
+                f"🎯 *Min. Limit:* `{MIN_WITHDRAW:.2f} USDT`\n"
+                f"💡 Unlock karne ke liye *{refs_needed} aur refer* karein!",
+                parse_mode="Markdown"
             )
         else:
             kb = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⚡ Confirm & Instant Payout", callback_data="confirm_withdraw")],
                 [InlineKeyboardButton("❌ Cancel Request", callback_data="cancel_withdraw")]
             ])
-            
             await update.message.reply_text(
-                f"👑 *⚡ 𝗨𝗦𝗗𝗧 𝗣𝗥𝗘𝗠𝗜𝗨𝗠 𝗪𝗜𝗧𝗛𝗗𝗥𝗔𝗪𝗔𝗟 ⚡*\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"👤 *User:* `{update.effective_user.first_name}`\n"
-                f"💵 *Requested Amount:* `{bal:.4f} USDT`\n"
-                f"👛 *Destination Wallet:* `{wallet}`\n"
-                f"⚡ *Network:* USDT (TRC-20 / BEP-20)\n"
-                f"🛡️ *Fee:* `0.00 USDT` (FREE)\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"⚠️ *Confirmation:* Kya aap instant withdrawal trigger karna chahte hain?",
-                parse_mode="Markdown",
-                reply_markup=kb
+                f"👑 *⚡ 𝗨𝗦𝗗𝗧 𝗣𝗥𝗘𝗠𝗜𝗨𝗠 𝗪𝗜𝗧𝗛𝗗𝗥𝗔𝗪𝗔𝗟 ⚡*\n\n"
+                f"💵 *Amount:* `{bal:.4f} USDT`\n"
+                f"👛 *Wallet:* `{wallet}`\n\nConfirm karein?",
+                parse_mode="Markdown", reply_markup=kb
             )
 
     elif text == "📊 Leaderboard":
-        await update.message.reply_text(
-            "🏆 *⚡ 𝗧𝗢𝗣 𝗥𝗘𝗙𝗘𝗥𝗥𝗘𝗥𝗦 𝗟𝗘𝗔𝗗𝗘𝗥𝗕𝗢𝗔𝗥𝗗 ⚡*\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "🥇 1. @CryptoKing_99 — `145.50 USDT` 🔥\n"
-            "🥈 2. @Alex_Trader — `92.00 USDT` 💎\n"
-            "🥉 3. @Rahul_Pro — `68.50 USDT` ✨\n"
-            "4️⃣ 4. @Sami_Earn — `44.00 USDT` 🚀\n"
-            "5️⃣ 5. @Vip_User12 — `31.50 USDT` ⚡\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "🎁 *Top users get monthly extra rewards!*",
-            parse_mode="Markdown"
-        )
+        await update.message.reply_text("🏆 *TOP REFERRERS LEADERBOARD*\n\n1. @CryptoKing — 145 USDT\n2. @Alex — 92 USDT", parse_mode="Markdown")
 
     elif text == "📞 Support":
-        await update.message.reply_text(
-            "📞 *24/7 VIP SUPPORT*\n\n"
-            "Support ke liye contact karein:\n"
-            "💬 Admin Support: @nobitabanxunban",
-            parse_mode="Markdown"
-        )
+        await update.message.reply_text("💬 Admin Support: @nobitabanxunban")
 
-# ---------------------------------------------------------
-# COMMANDS & INLINE CALLBACKS
-# ---------------------------------------------------------
 async def set_wallet_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     init_user(user_id, update.effective_user.username)
-    
     if not context.args:
-        await update.message.reply_text("❌ Command syntax wrong!\nUse: `/setwallet YOUR_ADDRESS`", parse_mode="Markdown")
+        await update.message.reply_text("❌ Usage: `/setwallet YOUR_ADDRESS`", parse_mode="Markdown")
         return
-
-    address = context.args[0]
-    users_db[user_id]["wallet"] = address
-    await update.message.reply_text(f"✅ *Wallet Address Saved Successfully!*\n\n`{address}`", parse_mode="Markdown")
+    users_db[user_id]["wallet"] = context.args[0]
+    await update.message.reply_text(f"✅ *Wallet Address Saved!*\n`{context.args[0]}`", parse_mode="Markdown")
 
 async def inline_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
-    data = query.data
-
-    if data == "confirm_withdraw":
+    if query.data == "confirm_withdraw":
         bal = users_db[user_id]["balance"]
-        wallet = users_db[user_id]["wallet"]
-        
         if bal >= MIN_WITHDRAW:
             users_db[user_id]["balance"] = 0.0
-            withdrawal_requests.append({"user_id": user_id, "amount": bal, "wallet": wallet})
-            
-            await query.answer("🚀 Processing Withdrawal...", show_alert=True)
-            await query.edit_message_text(
-                f"✅ *⚡ 𝗪𝗜𝗧𝗛𝗗𝗥𝗔𝗪𝗔𝗟 𝗥𝗘𝗤𝗨𝗘𝗦𝗧 𝗦𝗨𝗕𝗠𝗜𝗧𝗧𝗘𝗗! ⚡*\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"💵 *Amount:* `{bal:.4f} USDT`\n"
-                f"👛 *Wallet:* `{wallet}`\n"
-                f"⏳ *Status:* `Processing via Automatic Gateway`\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"📩 Payout complete hote hi notification mil jayega. Thank you!",
-                parse_mode="Markdown"
-            )
-        else:
-            await query.answer("❌ Insufficient Balance!", show_alert=True)
+            withdrawal_requests.append({"user_id": user_id, "amount": bal, "wallet": users_db[user_id]["wallet"]})
+            await query.answer("🚀 Processing...", show_alert=True)
+            await query.edit_message_text("✅ *WITHDRAWAL REQUEST SUBMITTED!* Payout status update hone tak wait karein.", parse_mode="Markdown")
+    elif query.data == "cancel_withdraw":
+        await query.edit_message_text("❌ Request Cancelled.")
 
-    elif data == "cancel_withdraw":
-        await query.answer("Cancelled")
-        await query.edit_message_text("❌ Withdrawal request cancelled.")
-
-    elif data == "get_ref":
-        ref_link = f"https://t.me/{BOT_USERNAME.replace('@', '')}?start={user_id}"
-        await query.answer()
-        await query.message.reply_text(f"🔗 *Your Referral Link:*\n`{ref_link}`", parse_mode="Markdown")
-
-# ---------------------------------------------------------
-# ADMIN COMMANDS (/stats & /broadcast)
-# ---------------------------------------------------------
 async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id not in ADMIN_IDS:
-        await update.message.reply_text("⛔ Access Denied: Admin Only Command!")
-        return
-
-    total_users = len(users_db)
-    verified_users = sum(1 for u in users_db.values() if u.get("joined"))
-    total_balanced_usdt = sum(u.get("balance", 0) for u in users_db.values())
-
-    stats_msg = (
-        f"📊 *⚡ 𝗕𝗢𝗧 𝗔𝗗𝗠𝗜𝗡 𝗦𝗧𝗔𝗧𝗜𝗦𝗧𝗜𝗖𝗦 ⚡*\n"
-        f"━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"👥 *Total Registered Users:* `{total_users}`\n"
-        f"✅ *Verified Active Users:* `{verified_users}`\n"
-        f"💵 *Total User Balance:* `{total_balanced_usdt:.2f} USDT`\n"
-        f"💸 *Pending Payout Requests:* `{len(withdrawal_requests)}`\n"
-        f"━━━━━━━━━━━━━━━━━━━━━━━━━"
-    )
-    await update.message.reply_text(stats_msg, parse_mode="Markdown")
+    if update.effective_user.id not in ADMIN_IDS: return
+    await update.message.reply_text(f"📊 *STATS:* Total Users: `{len(users_db)}`", parse_mode="Markdown")
 
 async def admin_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id not in ADMIN_IDS:
-        await update.message.reply_text("⛔ Access Denied: Admin Only Command!")
-        return
-
-    if not context.args and not update.message.reply_to_message:
-        await update.message.reply_text("❌ Usage: `/broadcast Your Text` ya kisi message/photo par reply karke `/broadcast` likhein.", parse_mode="Markdown")
-        return
-
+    if update.effective_user.id not in ADMIN_IDS: return
     users = list(users_db.keys())
-    sent = 0
-    failed = 0
-
-    status_msg = await update.message.reply_text(f"⏳ *Broadcast Initiated to {len(users)} users...*", parse_mode="Markdown")
-
     for uid in users:
         try:
             if update.message.reply_to_message:
                 await update.message.reply_to_message.copy(chat_id=uid)
             else:
-                broadcast_text = " ".join(context.args)
-                await context.bot.send_message(chat_id=uid, text=broadcast_text, parse_mode="Markdown")
-            sent += 1
+                await context.bot.send_message(chat_id=uid, text=" ".join(context.args), parse_mode="Markdown")
             await asyncio.sleep(0.05)
-        except Exception:
-            failed += 1
-
-    await status_msg.edit_text(
-        f"✅ *⚡ 𝗕𝗥𝗢𝗔𝗗𝗖𝗔𝗦𝗧 𝗖𝗢𝗠𝗣𝗟𝗘𝗧𝗘𝗗 ⚡*\n"
-        f"━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"📤 *Successfully Sent:* `{sent}`\n"
-        f"❌ *Failed / Blocked:* `{failed}`",
-        parse_mode="Markdown"
-    )
+        except Exception: pass
+    await update.message.reply_text("✅ Broadcast Completed!")
 
 def main():
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    # Run Web Keep-Alive for Render Web Service
+    keep_alive()
 
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("stats", admin_stats))
     app.add_handler(CommandHandler("broadcast", admin_broadcast))
@@ -411,7 +302,7 @@ def main():
     app.add_handler(CallbackQueryHandler(inline_callbacks))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu_handler))
 
-    print("🤖 USDT Giveaway Bot is Online & Running...")
+    print("🤖 USDT Giveaway Bot with Flask Server is Online!")
     app.run_polling()
 
 if __name__ == "__main__":
