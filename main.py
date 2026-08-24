@@ -30,13 +30,14 @@ def keep_alive():
 # BOT CONFIGURATION
 # ---------------------------------------------------------
 BOT_TOKEN = "8999949252:AAHxaZv45n6b1Nfzl8xr61XiNW19uZwQuZE"
-BOT_USERNAME = "@Nobita_banbot"
+BOT_USERNAME = "Usdt_giveway_bot"  # Stripped @ for clean URL construction
 
-ADMIN_IDS = [6132146801]  # Updated with Admin User ID
+ADMIN_IDS = [6132146801]
 
 MANDATORY_CHANNEL = "@nobitabanxunban"
 MANDATORY_CHANNEL_LINK = "https://t.me/nobitabanxunban"
 PRIVATE_CHANNEL_LINK = "https://t.me/+ckvWhC-ac90zZTk1"
+SUPPORT_USERNAME = "@Lordadii"
 
 GIVEAWAY_PHOTO = "https://images.unsplash.com/photo-1621416894569-0f39ed31d247?w=1000"
 
@@ -88,24 +89,23 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
 
     keyboard = [
-        [InlineKeyboardButton("📢 1️⃣ Join Main Channel (Mandatory)", url=MANDATORY_CHANNEL_LINK)],
-        [InlineKeyboardButton("🔒 2️⃣ Request VIP Channel Access", url=PRIVATE_CHANNEL_LINK)],
-        [InlineKeyboardButton("🤖 Mandatory Bot Link", url=f"https://t.me/{BOT_USERNAME.replace('@', '')}")],
-        [InlineKeyboardButton("⚡ 3️⃣ VERIFY & CLAIM REWARDS ⚡", callback_data="verify_join")]
+        [InlineKeyboardButton("📢 1️⃣ Join Main Channel", url=MANDATORY_CHANNEL_LINK)],
+        [InlineKeyboardButton("🔒 2️⃣ VIP Access Request", url=PRIVATE_CHANNEL_LINK)],
+        [InlineKeyboardButton("🤖 Mandatory Bot Link", url=f"https://t.me/{BOT_USERNAME}")],
+        [InlineKeyboardButton("✨ 3️⃣ VERIFY & CLAIM ✨", callback_data="verify_join")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     caption = (
-        f"👑 <b>⚡ 𝗛𝗘𝗬𝗬 {first_name.upper()} ⚡</b>\n\n"
-        f"🔥 <b>𝗪𝗘𝗟𝗖𝗢𝗠𝗘 𝗧𝗢 𝗨𝗦𝗗𝗧 𝗚𝗜𝗩𝗘𝗔𝗪𝗔𝗬 𝗕𝗢𝗧</b> 🔥\n"
-        f"🤖 <b>Bot Link:</b> {BOT_USERNAME}\n\n"
-        f"🏆 <b>💎 Premium USDT Rewards System 💎</b>\n"
+        f"⚡ <b>WELCOME {first_name.upper()}</b> ⚡\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"🎁 <b>Daily Bonus:</b> <code>{DAILY_BONUS:.2f} USDT</code> / 24 Hours\n"
-        f"👥 <b>Per Referral:</b> <code>{REFERRAL_BONUS:.2f} USDT</code> (Instant)\n"
-        f"💸 <b>Min. Payout:</b> <code>{MIN_WITHDRAW:.2f} USDT</code> (BEP20 / TRC20)\n"
+        f"🏆 <b>💎 PREMIUM USDT REWARDS 💎</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"🎁 <b>Daily Bonus:</b> <code>{DAILY_BONUS:.2f} USDT</code>\n"
+        f"👥 <b>Per Referral:</b> <code>{REFERRAL_BONUS:.2f} USDT</code>\n"
+        f"💸 <b>Min. Payout:</b> <code>{MIN_WITHDRAW:.2f} USDT</code>\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"👇 <i>Niche diye gaye channels join karein aur Verify button par click karein!</i>"
+        f"👇 <i>Niche diye gaye channels join karein aur Verify button dabayein!</i>"
     )
 
     await update.message.reply_photo(
@@ -132,9 +132,9 @@ async def verify_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await context.bot.send_message(
                         chat_id=ref_id,
                         text=(
-                            f"🎉 <b>New Referral Joined!</b>\n\n"
+                            f"✨ <b>NEW REFERRAL JOINED!</b> ✨\n\n"
                             f"👤 User: <code>{query.from_user.first_name}</code>\n"
-                            f"➕ Added: <code>+{REFERRAL_BONUS:.2f} USDT</code> 💎"
+                            f"💎 Bonus Added: <code>+{REFERRAL_BONUS:.2f} USDT</code>"
                         ),
                         parse_mode="HTML"
                     )
@@ -150,21 +150,24 @@ async def verify_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def show_main_menu(message, name):
     menu_keyboard = [
         [KeyboardButton("💰 Balance"), KeyboardButton("🎁 Daily Bonus")],
-        [KeyboardButton("🔗 Referral Link"), KeyboardButton("💸 Premium Withdraw")],
-        [KeyboardButton("📊 Leaderboard"), KeyboardButton("⚙️ Set Wallet"), KeyboardButton("📞 Support")]
+        [KeyboardButton("🔗 Referral Link"), KeyboardButton("💸 Withdraw")],
+        [KeyboardButton("📊 Leaderboard"), KeyboardButton("⚙️ Set Wallet")],
+        [KeyboardButton("📞 Support")]
     ]
     reply_markup = ReplyKeyboardMarkup(menu_keyboard, resize_keyboard=True)
 
     text = (
-        f"🌟 <b>WELCOME TO DASHBOARD, {name.upper()}!</b> 🌟\n\n"
-        f"✅ Aapka account verified hai.\n"
-        f"🤖 Bot: {BOT_USERNAME}\n"
-        f"🚀 Niche Menu se Option select karein aur USDT earn karna shuru karein!"
+        f"💎 <b>MAIN DASHBOARD</b> 💎\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"👤 <b>User:</b> <code>{name.upper()}</code>\n"
+        f"✅ <b>Status:</b> <code>Verified Member</code>\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"🚀 Niche Menu se option select karein aur earning start karein!"
     )
     await message.reply_text(text, parse_mode="HTML", reply_markup=reply_markup)
 
 # ---------------------------------------------------------
-# MENU & WITHDRAWAL HANDLERS
+# MENU HANDLERS
 # ---------------------------------------------------------
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -181,14 +184,14 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         wallet = users_db[user_id]["wallet"] or "Not Set (⚙️ Set Wallet par click karein)"
         
         reply = (
-            f"💳 <b>⚡ 𝗬𝗢𝗨𝗥 𝗔𝗖𝗖𝗢𝗨𝗡𝗧 𝗕𝗔𝗟𝗔𝗡𝗖𝗘 ⚡</b>\n"
+            f"💳 <b>YOUR ACCOUNT BALANCE</b>\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"👤 <b>User:</b> <code>{update.effective_user.first_name}</code>\n"
-            f"💵 <b>USDT Balance:</b> <code>{bal:.4f} USDT</code> 💎\n"
-            f"👥 <b>Total Referrals:</b> <code>{refs} Users</code> 🔥\n"
-            f"👛 <b>Configured Wallet:</b> <code>{wallet}</code>\n"
+            f"💵 <b>Balance:</b> <code>{bal:.4f} USDT</code> 💎\n"
+            f"👥 <b>Total Referrals:</b> <code>{refs} Users</code>\n"
+            f"👛 <b>Wallet:</b> <code>{wallet}</code>\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"🎯 <b>Next Goal:</b> Minimum <code>{MIN_WITHDRAW:.2f} USDT</code> to Payout!"
+            f"🎯 <b>Min. Payout:</b> <code>{MIN_WITHDRAW:.2f} USDT</code>"
         )
         await update.message.reply_text(reply, parse_mode="HTML")
 
@@ -196,62 +199,62 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not users_db[user_id]["claimed_today"]:
             users_db[user_id]["balance"] += DAILY_BONUS
             users_db[user_id]["claimed_today"] = True
-            await update.message.reply_text("🎉 <b>DAILY REWARD CLAIMED!</b> 🎉\n\n✅ <b>+0.05 USDT</b> add ho gaya hai!", parse_mode="HTML")
+            await update.message.reply_text("🎉 <b>DAILY REWARD CLAIMED!</b>\n\n✅ <b>+0.05 USDT</b> account me credit ho gaya!", parse_mode="HTML")
         else:
-            await update.message.reply_text("⏳ <b>Bonus Already Claimed!</b> Kal wapas aana.", parse_mode="HTML")
+            await update.message.reply_text("⏳ <b>Already Claimed!</b> Daily bonus kal milega.", parse_mode="HTML")
 
     elif text == "🔗 Referral Link":
-        ref_link = f"https://t.me/{BOT_USERNAME.replace('@', '')}?start={user_id}"
+        ref_link = f"https://t.me/{BOT_USERNAME}?start={user_id}"
         refs = users_db[user_id]["referrals"]
         
         caption = (
-            f"🚀 <b>⚡ 𝗥𝗘𝗙𝗘𝗥 𝗔𝗡𝗗 𝗘𝗔𝗥𝗡 𝗨𝗦𝗗𝗧 ⚡</b>\n"
+            f"🚀 <b>REFER & EARN USDT</b>\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"🎁 <b>Reward Per Refer:</b> <code>{REFERRAL_BONUS:.2f} USDT</code> 💎\n"
-            f"👥 <b>Your Total Referrals:</b> <code>{refs}</code>\n\n"
-            f"🔗 <b>Your Exclusive Invite Link:</b>\n<code>{ref_link}</code>"
+            f"💎 <b>Reward Per Refer:</b> <code>{REFERRAL_BONUS:.2f} USDT</code>\n"
+            f"👥 <b>Your Referrals:</b> <code>{refs}</code>\n\n"
+            f"🔗 <b>Your Invite Link:</b>\n<code>{ref_link}</code>"
         )
         keyboard = [[InlineKeyboardButton("📢 Share With Friends", url=f"https://t.me/share/url?url={ref_link}&text=Join%20USDT%20Giveaway%20Bot!")]]
         await update.message.reply_text(caption, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard))
 
     elif text == "⚙️ Set Wallet":
-        await update.message.reply_text("⚙️ <b>SET WALLET</b>\n\nCommand send karein: <code>/setwallet YOUR_TRC20_ADDRESS</code>", parse_mode="HTML")
+        await update.message.reply_text("⚙️ <b>SET WALLET ADDRESS</b>\n\nSend: <code>/setwallet YOUR_TRC20_ADDRESS</code>", parse_mode="HTML")
 
-    elif text == "💸 Premium Withdraw":
+    elif text == "💸 Withdraw":
         bal = users_db[user_id]["balance"]
         wallet = users_db[user_id]["wallet"]
         
         if not wallet:
-            await update.message.reply_text("⚠️ <b>Wallet Not Set!</b> Pehle <code>/setwallet ADDRESS</code> daalein.", parse_mode="HTML")
+            await update.message.reply_text("⚠️ <b>Wallet Not Set!</b> Pehle <code>/setwallet ADDRESS</code> set karein.", parse_mode="HTML")
             return
 
         if bal < MIN_WITHDRAW:
             needed = MIN_WITHDRAW - bal
             refs_needed = int((needed // REFERRAL_BONUS) + (1 if needed % REFERRAL_BONUS != 0 else 0))
             await update.message.reply_text(
-                f"❌ <b>WITHDRAWAL LOCK DETECTED!</b>\n\n"
-                f"💳 <b>Balance:</b> <code>{bal:.4f} USDT</code>\n"
+                f"❌ <b>INSUFFICIENT BALANCE!</b>\n\n"
+                f"💳 <b>Current Balance:</b> <code>{bal:.4f} USDT</code>\n"
                 f"🎯 <b>Min. Limit:</b> <code>{MIN_WITHDRAW:.2f} USDT</code>\n"
-                f"💡 Unlock karne ke liye <b>{refs_needed} aur refer</b> karein!",
+                f"💡 Account unlock ke liye <b>{refs_needed} aur refer</b> karein!",
                 parse_mode="HTML"
             )
         else:
             kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("⚡ Confirm & Instant Payout", callback_data="confirm_withdraw")],
-                [InlineKeyboardButton("❌ Cancel Request", callback_data="cancel_withdraw")]
+                [InlineKeyboardButton("⚡ Confirm Payout", callback_data="confirm_withdraw")],
+                [InlineKeyboardButton("❌ Cancel", callback_data="cancel_withdraw")]
             ])
             await update.message.reply_text(
-                f"👑 <b>⚡ 𝗨𝗦𝗗𝗧 𝗣𝗥𝗘𝗠𝗜𝗨𝗠 𝗪𝗜𝗧𝗛𝗗𝗥𝗔𝗪𝗔𝗟 ⚡</b>\n\n"
+                f"👑 <b>WITHDRAWAL REQUEST</b>\n\n"
                 f"💵 <b>Amount:</b> <code>{bal:.4f} USDT</code>\n"
                 f"👛 <b>Wallet:</b> <code>{wallet}</code>\n\nConfirm karein?",
                 parse_mode="HTML", reply_markup=kb
             )
 
     elif text == "📊 Leaderboard":
-        await update.message.reply_text("🏆 <b>TOP REFERRERS LEADERBOARD</b>\n\n1. @CryptoKing — 145 USDT\n2. @Alex — 92 USDT", parse_mode="HTML")
+        await update.message.reply_text("🏆 <b>TOP REFERRERS</b>\n\n1. @CryptoKing — 145 USDT\n2. @Alex — 92 USDT", parse_mode="HTML")
 
     elif text == "📞 Support":
-        await update.message.reply_text("💬 Admin Support: @nobitabanxunban", parse_mode="HTML")
+        await update.message.reply_text(f"💬 <b>Admin Support:</b> {SUPPORT_USERNAME}", parse_mode="HTML")
 
 async def set_wallet_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -260,7 +263,7 @@ async def set_wallet_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Usage: <code>/setwallet YOUR_ADDRESS</code>", parse_mode="HTML")
         return
     users_db[user_id]["wallet"] = context.args[0]
-    await update.message.reply_text(f"✅ <b>Wallet Address Saved!</b>\n<code>{context.args[0]}</code>", parse_mode="HTML")
+    await update.message.reply_text(f"✅ <b>Wallet Saved!</b>\n<code>{context.args[0]}</code>", parse_mode="HTML")
 
 async def inline_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -271,7 +274,7 @@ async def inline_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
             users_db[user_id]["balance"] = 0.0
             withdrawal_requests.append({"user_id": user_id, "amount": bal, "wallet": users_db[user_id]["wallet"]})
             await query.answer("🚀 Processing...", show_alert=True)
-            await query.edit_message_text("✅ <b>WITHDRAWAL REQUEST SUBMITTED!</b> Payout status update hone tak wait karein.", parse_mode="HTML")
+            await query.edit_message_text("✅ <b>REQUEST SUBMITTED!</b> Approval ka wait karein.", parse_mode="HTML")
     elif query.data == "cancel_withdraw":
         await query.edit_message_text("❌ Request Cancelled.")
 
@@ -288,7 +291,6 @@ async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "📊 <b>ADMIN SYSTEM STATISTICS</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
         f"👥 <b>Total Users:</b> <code>{len(users_db)}</code>\n"
-        f"🤖 <b>Bot Target:</b> <code>{BOT_USERNAME}</code>\n"
         f"💳 <b>Pending Withdrawals:</b> <code>{len(withdrawal_requests)}</code>\n"
         "🟢 <b>Status:</b> <code>100% Active</code>\n"
         "━━━━━━━━━━━━━━━━━━━━━━"
