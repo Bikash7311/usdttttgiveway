@@ -1,308 +1,342 @@
 import logging
 import asyncio
-import os
-from threading import Thread
-from flask import Flask
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
-    ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler, MessageHandler, filters
+    Application,
+    CommandHandler,
+    CallbackQueryHandler,
+    MessageHandler,
+    ContextTypes,
+    filters,
+    ConversationHandler
 )
 
-# ---------------------------------------------------------
-# FLASK KEEP-ALIVE SERVER (For Render Web Service)
-# ---------------------------------------------------------
-web_app = Flask(__name__)
+# Configuration
+API_ID = 33772941
+API_HASH = "3b6ab6b1940c87915439bb41e4e80ea8"
+BOT_TOKEN = "8580109392:AAH_IASAWo3vAiPAfSNbr_l_Yk8UG72V6R0"
 
-@web_app.route('/')
-def home():
-    return "USDT Giveaway Bot is Running 24/7!"
+OWNER_USERNAME = "@Znonsence"
+OWNER_ID = 6132146801  # Admin User ID
+BOT_USERNAME = "@Nobita_banbot"
 
-def run_flask():
-    port = int(os.environ.get("PORT", 8080))
-    web_app.run(host='0.0.0.0', port=port)
+MANDATORY_CHANNELS = [
+    {"name": "📢 Main Channel", "url": "https://t.me/nobitabanxunban"},
+    {"name": "🔒 Backup Channel", "url": "https://t.me/+O1CtosbUTxU2ODBl"}
+]
 
-def keep_alive():
-    t = Thread(target=run_flask)
-    t.daemon = True
-    t.start()
+MIN_WITHDRAWAL = 5.0  # Minimum 5$ USDT
 
-# ---------------------------------------------------------
-# BOT CONFIGURATION
-# ---------------------------------------------------------
-BOT_TOKEN = "8999949252:AAFajrj8WNlHWU9Px13VpltL2j1cPzyiPxY"
-BOT_USERNAME = "@Usdt_giveway_bot"
+# Data storage (In-Memory)
+USER_BALANCES = {}
+USER_PREMIUM = {}
+ALL_USERS = set()  # Broadcast track karne ke liye set
 
-ADMIN_IDS = [123456789]  # Replace with your numeric Telegram User ID
+# Conversation States for Withdrawal
+WAITING_ADDRESS, WAITING_AMOUNT = range(2)
 
-MANDATORY_CHANNEL = "@nobitabanxunban"
-MANDATORY_CHANNEL_LINK = "https://t.me/nobitabanxunban"
-PRIVATE_CHANNEL_LINK = "https://t.me/+ckvWhC-ac90zZTk1"
+logging.basicConfig(level=logging.INFO)
 
-GIVEAWAY_PHOTO = "https://images.unsplash.com/photo-1621416894569-0f39ed31d247?w=1000"
-
-MIN_WITHDRAW = 5.0
-DAILY_BONUS = 0.05
-REFERRAL_BONUS = 0.50
-
-users_db = {}
-withdrawal_requests = []
-
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
-
-async def is_user_joined(user_id, context):
-    try:
-        member = await context.bot.get_chat_member(chat_id=MANDATORY_CHANNEL, user_id=user_id)
-        if member.status in ['creator', 'administrator', 'member']:
-            return True
-    except Exception as e:
-        logging.warning(f"Membership check failed: {e}")
-        return False
-    return False
-
-def init_user(user_id, username=None):
-    if user_id not in users_db:
-        users_db[user_id] = {
-            "balance": 0.0,
-            "referrals": 0,
-            "claimed_today": False,
-            "wallet": None,
-            "username": username or "User",
-            "joined": False
-        }
-
-# ---------------------------------------------------------
-# START & VERIFICATION
-# ---------------------------------------------------------
+# --- START COMMAND ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_id = user.id
-    first_name = user.first_name
-    init_user(user_id, user.username)
 
-    if context.args and not users_db[user_id]["joined"]:
-        try:
-            referrer_id = int(context.args[0])
-            if referrer_id in users_db and referrer_id != user_id:
-                users_db[user_id]["referred_by"] = referrer_id
-        except ValueError:
-            pass
+    ALL_USERS.add(user_id)  # Save user ID for broadcast
+
+    if user_id not in USER_BALANCES:
+        USER_BALANCES[user_id] = 0.0
 
     keyboard = [
-        [InlineKeyboardButton("📢 1️⃣ Join Main Channel (Mandatory)", url=MANDATORY_CHANNEL_LINK)],
-        [InlineKeyboardButton("🔒 2️⃣ Request VIP Channel Access", url=PRIVATE_CHANNEL_LINK)],
-        [InlineKeyboardButton("⚡ 3️⃣ VERIFY & CLAIM REWARDS ⚡", callback_data="verify_join")]
+        [InlineKeyboardButton("📢 Main Channel", url="https://t.me/nobitabanxunban")],
+        [InlineKeyboardButton("🔒 Backup Channel", url="https://t.me/+O1CtosbUTxU2ODBl")],
+        [InlineKeyboardButton("🤖 Share Bot Link", url=f"https://t.me/share/url?url=https://t.me/Nobita_banbot")],
+        [InlineKeyboardButton("✅ Verified & Continue", callback_data="main_menu")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    caption = (
-        f"👑 *⚡ 𝗛𝗘𝗬𝗬 {first_name.upper()} ⚡*\n\n"
-        f"🔥 *𝗪𝗘𝗟𝗖𝗢𝗠𝗘 𝗧𝗢 𝗨𝗦𝗗𝗧 𝗚𝗜𝗩𝗘𝗔𝗪𝗔𝗬 𝗕𝗢𝗧* 🔥\n\n"
-        f"🏆 *💎 Premium USDT Rewards System 💎*\n"
-        f"━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"🎁 *Daily Bonus:* `{DAILY_BONUS:.2f} USDT` / 24 Hours\n"
-        f"👥 *Per Referral:* `{REFERRAL_BONUS:.2f} USDT` (Instant)\n"
-        f"💸 *Min. Payout:* `{MIN_WITHDRAW:.2f} USDT` (BEP20 / TRC20)\n"
-        f"━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"👇 *Niche diye gaye 2 Channels join karein aur Verify button par click karein!*"
+    text = (
+        "✨ <b>Welcome to Nobita Security Bot</b> ✨\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"🤖 <b>Bot Username:</b> {BOT_USERNAME}\n"
+        "⚡ <b>Status:</b> <i>Premium Active & Operational</i>\n\n"
+        "⚠️ <b>Mandatory Requirement:</b>\n"
+        "Bot access ke liye niche diye gaye dono official channels join karna zaroori hai.\n"
+        "━━━━━━━━━━━━━━━━━━━━━━"
     )
+    await update.message.reply_text(text, reply_markup=reply_markup, parse_mode="HTML")
 
-    await update.message.reply_photo(
-        photo=GIVEAWAY_PHOTO,
-        caption=caption,
-        parse_mode="Markdown",
-        reply_markup=reply_markup
-    )
-
-async def verify_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# --- MAIN MENU ---
+async def main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
+    await query.answer()
+
     user_id = query.from_user.id
-    init_user(user_id, query.from_user.username)
+    ALL_USERS.add(user_id)
 
-    joined = await is_user_joined(user_id, context)
-    
-    if joined:
-        if not users_db[user_id]["joined"] and "referred_by" in users_db[user_id]:
-            ref_id = users_db[user_id]["referred_by"]
-            if ref_id in users_db:
-                users_db[ref_id]["balance"] += REFERRAL_BONUS
-                users_db[ref_id]["referrals"] += 1
-                try:
-                    await context.bot.send_message(
-                        chat_id=ref_id,
-                        text=(
-                            f"🎉 *New Referral Joined!*\n\n"
-                            f"👤 User: `{query.from_user.first_name}`\n"
-                            f"➕ Added: `+{REFERRAL_BONUS:.2f} USDT` 💎"
-                        ),
-                        parse_mode="Markdown"
-                    )
-                except Exception:
-                    pass
-
-        users_db[user_id]["joined"] = True
-        await query.answer("✅ Verification Successful! Welcome!", show_alert=True)
-        await show_main_menu(query.message, query.from_user.first_name)
-    else:
-        await query.answer("❌ Verification Failed! Pehle Main Channel join karein.", show_alert=True)
-
-async def show_main_menu(message, name):
-    menu_keyboard = [
-        [KeyboardButton("💰 Balance"), KeyboardButton("🎁 Daily Bonus")],
-        [KeyboardButton("🔗 Referral Link"), KeyboardButton("💸 Premium Withdraw")],
-        [KeyboardButton("📊 Leaderboard"), KeyboardButton("⚙️ Set Wallet"), KeyboardButton("📞 Support")]
-    ]
-    reply_markup = ReplyKeyboardMarkup(menu_keyboard, resize_keyboard=True)
+    balance = USER_BALANCES.get(user_id, 0.0)
+    is_premium = "👑 Active (VIP)" if USER_PREMIUM.get(user_id) else "❌ Regular User"
 
     text = (
-        f"🌟 *WELCOME TO DASHBOARD, {name.upper()}!* 🌟\n\n"
-        f"✅ Aapka account verified hai.\n"
-        f"🚀 Niche Menu se Option select karein aur USDT earn karna shuru karein!"
+        "👑 <b>NOBITA VIP SYSTEM DASHBOARD</b> 👑\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"👤 <b>User:</b> {query.from_user.first_name}\n"
+        f"🆔 <b>ID:</b> <code>{user_id}</code>\n"
+        f"💳 <b>Balance:</b> <code>${balance:.2f} USDT</code>\n"
+        f"⭐ <b>Status:</b> <code>{is_premium}</code>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        "👇 <i>Apna required option select karein:</i>"
     )
-    await message.reply_text(text, parse_mode="Markdown", reply_markup=reply_markup)
 
-# ---------------------------------------------------------
-# MENU & WITHDRAWAL HANDLERS
-# ---------------------------------------------------------
-async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    text = update.message.text
-    init_user(user_id, update.effective_user.username)
+    keyboard = [
+        [InlineKeyboardButton("💳 Wallet & Withdraw", callback_data="wallet_menu"), InlineKeyboardButton("💎 Buy Premium ($50)", callback_data="buy_premium")],
+        [InlineKeyboardButton("📊 System Stats", callback_data="user_stats"), InlineKeyboardButton("👑 Contact Owner", url=f"https://t.me/{OWNER_USERNAME.replace('@','')}")],
+    ]
 
-    if not users_db[user_id]["joined"]:
-        await update.message.reply_text("⚠️ Pehle `/start` dabakar channels verify karein!", parse_mode="Markdown")
-        return
+    if user_id == OWNER_ID:
+        keyboard.append([InlineKeyboardButton("⚙️ Admin Controls", callback_data="admin_info")])
 
-    if text == "💰 Balance":
-        bal = users_db[user_id]["balance"]
-        refs = users_db[user_id]["referrals"]
-        wallet = users_db[user_id]["wallet"] or "Not Set (⚙️ Set Wallet par click karein)"
-        
-        reply = (
-            f"💳 *⚡ 𝗬𝗢𝗨𝗥 𝗔𝗖𝗖𝗢𝗨𝗡𝗧 𝗕𝗔𝗟𝗔𝗡𝗖𝗘 ⚡*\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"👤 *User:* `{update.effective_user.first_name}`\n"
-            f"💵 *USDT Balance:* `{bal:.4f} USDT` 💎\n"
-            f"👥 *Total Referrals:* `{refs} Users` 🔥\n"
-            f"👛 *Configured Wallet:* `{wallet}`\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"🎯 *Next Goal:* Minimum `{MIN_WITHDRAW:.2f} USDT` to Payout!"
-        )
-        await update.message.reply_text(reply, parse_mode="Markdown")
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await query.edit_message_text(text, reply_markup=reply_markup, parse_mode="HTML")
 
-    elif text == "🎁 Daily Bonus":
-        if not users_db[user_id]["claimed_today"]:
-            users_db[user_id]["balance"] += DAILY_BONUS
-            users_db[user_id]["claimed_today"] = True
-            await update.message.reply_text("🎉 *DAILY REWARD CLAIMED!* 🎉\n\n✅ *+0.05 USDT* add ho gaya hai!", parse_mode="Markdown")
-        else:
-            await update.message.reply_text("⏳ *Bonus Already Claimed!* Kal wapas aana.", parse_mode="Markdown")
-
-    elif text == "🔗 Referral Link":
-        ref_link = f"https://t.me/{BOT_USERNAME.replace('@', '')}?start={user_id}"
-        refs = users_db[user_id]["referrals"]
-        
-        caption = (
-            f"🚀 *⚡ 𝗥𝗘𝗙𝗘𝗥 𝗔𝗡𝗗 𝗘𝗔𝗥𝗡 𝗨𝗦𝗗𝗧 ⚡*\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"🎁 *Reward Per Refer:* `{REFERRAL_BONUS:.2f} USDT` 💎\n"
-            f"👥 *Your Total Referrals:* `{refs}`\n\n"
-            f"🔗 *Your Exclusive Invite Link:*\n`{ref_link}`"
-        )
-        keyboard = [[InlineKeyboardButton("📢 Share With Friends", url=f"https://t.me/share/url?url={ref_link}&text=Join%20USDT%20Giveaway%20Bot!")]]
-        await update.message.reply_text(caption, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
-
-    elif text == "⚙️ Set Wallet":
-        await update.message.reply_text("⚙️ *SET WALLET*\n\nCommand send karein: `/setwallet YOUR_TRC20_ADDRESS`", parse_mode="Markdown")
-
-    elif text == "💸 Premium Withdraw":
-        bal = users_db[user_id]["balance"]
-        wallet = users_db[user_id]["wallet"]
-        
-        if not wallet:
-            await update.message.reply_text("⚠️ *Wallet Not Set!* Pehle `/setwallet ADDRESS` daalein.", parse_mode="Markdown")
-            return
-
-        if bal < MIN_WITHDRAW:
-            needed = MIN_WITHDRAW - bal
-            refs_needed = int((needed // REFERRAL_BONUS) + (1 if needed % REFERRAL_BONUS != 0 else 0))
-            await update.message.reply_text(
-                f"❌ *WITHDRAWAL LOCK DETECTED!*\n\n"
-                f"💳 *Balance:* `{bal:.4f} USDT`\n"
-                f"🎯 *Min. Limit:* `{MIN_WITHDRAW:.2f} USDT`\n"
-                f"💡 Unlock karne ke liye *{refs_needed} aur refer* karein!",
-                parse_mode="Markdown"
-            )
-        else:
-            kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("⚡ Confirm & Instant Payout", callback_data="confirm_withdraw")],
-                [InlineKeyboardButton("❌ Cancel Request", callback_data="cancel_withdraw")]
-            ])
-            await update.message.reply_text(
-                f"👑 *⚡ 𝗨𝗦𝗗𝗧 𝗣𝗥𝗘𝗠𝗜𝗨𝗠 𝗪𝗜𝗧𝗛𝗗𝗥𝗔𝗪𝗔𝗟 ⚡*\n\n"
-                f"💵 *Amount:* `{bal:.4f} USDT`\n"
-                f"👛 *Wallet:* `{wallet}`\n\nConfirm karein?",
-                parse_mode="Markdown", reply_markup=kb
-            )
-
-    elif text == "📊 Leaderboard":
-        await update.message.reply_text("🏆 *TOP REFERRERS LEADERBOARD*\n\n1. @CryptoKing — 145 USDT\n2. @Alex — 92 USDT", parse_mode="Markdown")
-
-    elif text == "📞 Support":
-        await update.message.reply_text("💬 Admin Support: @nobitabanxunban")
-
-async def set_wallet_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    init_user(user_id, update.effective_user.username)
-    if not context.args:
-        await update.message.reply_text("❌ Usage: `/setwallet YOUR_ADDRESS`", parse_mode="Markdown")
-        return
-    users_db[user_id]["wallet"] = context.args[0]
-    await update.message.reply_text(f"✅ *Wallet Address Saved!*\n`{context.args[0]}`", parse_mode="Markdown")
-
-async def inline_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    user_id = query.from_user.id
-    if query.data == "confirm_withdraw":
-        bal = users_db[user_id]["balance"]
-        if bal >= MIN_WITHDRAW:
-            users_db[user_id]["balance"] = 0.0
-            withdrawal_requests.append({"user_id": user_id, "amount": bal, "wallet": users_db[user_id]["wallet"]})
-            await query.answer("🚀 Processing...", show_alert=True)
-            await query.edit_message_text("✅ *WITHDRAWAL REQUEST SUBMITTED!* Payout status update hone tak wait karein.", parse_mode="Markdown")
-    elif query.data == "cancel_withdraw":
-        await query.edit_message_text("❌ Request Cancelled.")
-
+# --- ADMIN STATS COMMAND (/stats) ---
 async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id not in ADMIN_IDS: return
-    await update.message.reply_text(f"📊 *STATS:* Total Users: `{len(users_db)}`", parse_mode="Markdown")
+    user_id = update.effective_user.id
+    if user_id != OWNER_ID:
+        await update.message.reply_text("❌ <i>Aapke paas is command ko use karne ki permission nahi hai.</i>", parse_mode="HTML")
+        return
 
-async def admin_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id not in ADMIN_IDS: return
-    users = list(users_db.keys())
-    for uid in users:
+    total_users = len(ALL_USERS)
+    premium_users = sum(1 for status in USER_PREMIUM.values() if status)
+
+    text = (
+        "📊 <b>ADMIN SYSTEM STATISTICS</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"👥 <b>Total Users Tracked:</b> <code>{total_users}</code>\n"
+        f"💎 <b>Premium Subscribers:</b> <code>{premium_users}</code>\n"
+        f"🤖 <b>Bot Target:</b> <code>{BOT_USERNAME}</code>\n"
+        "🟢 <b>System Health:</b> <code>100% Operational</code>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━"
+    )
+    await update.message.reply_text(text, parse_mode="HTML")
+
+# --- ADMIN BROADCAST COMMAND (/broadcast) ---
+async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id != OWNER_ID:
+        await update.message.reply_text("❌ <i>Only Owner can execute broadcast.</i>", parse_mode="HTML")
+        return
+
+    reply_msg = update.message.reply_to_message
+    broadcast_text = " ".join(context.args)
+
+    if not reply_msg and not broadcast_text:
+        await update.message.reply_text(
+            "⚠️ <b>Broadcast Syntax Error!</b>\n\n"
+            "👉 <b>Usage 1:</b> Kisi message ko reply karke <code>/broadcast</code> likhein.\n"
+            "👉 <b>Usage 2:</b> Direct command me text add karein: <code>/broadcast Hello Users!</code>",
+            parse_mode="HTML"
+        )
+        return
+
+    status_msg = await update.message.reply_text("🚀 <i>Broadcasting message to all active users...</i>", parse_mode="HTML")
+
+    sent_count = 0
+    failed_count = 0
+
+    for uid in list(ALL_USERS):
         try:
-            if update.message.reply_to_message:
-                await update.message.reply_to_message.copy(chat_id=uid)
+            if reply_msg:
+                await context.bot.copy_message(chat_id=uid, from_chat_id=reply_msg.chat_id, message_id=reply_msg.message_id)
             else:
-                await context.bot.send_message(chat_id=uid, text=" ".join(context.args), parse_mode="Markdown")
-            await asyncio.sleep(0.05)
-        except Exception: pass
-    await update.message.reply_text("✅ Broadcast Completed!")
+                await context.bot.send_message(chat_id=uid, text=broadcast_text, parse_mode="HTML")
+            sent_count += 1
+            await asyncio.sleep(0.04)  # Protection against Telegram FloodWait
+        except Exception:
+            failed_count += 1
 
+    await status_msg.edit_text(
+        "📢 <b>BROADCAST REPORT</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"✅ <b>Delivered Successfully:</b> <code>{sent_count}</code>\n"
+        f"❌ <b>Failed/Blocked:</b> <code>{failed_count}</code>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━",
+        parse_mode="HTML"
+    )
+
+# --- WALLET & WITHDRAWAL UI ---
+async def wallet_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    user_id = query.from_user.id
+    balance = USER_BALANCES.get(user_id, 0.0)
+
+    text = (
+        "💼 <b>OFFICIAL USDT WALLET</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"💰 <b>Available Balance:</b> <code>${balance:.2f} USDT</code>\n"
+        f"🔻 <b>Minimum Payout:</b> <code>${MIN_WITHDRAWAL:.2f} USDT</code>\n"
+        "⚡ <b>Network:</b> <code>USDT (TRC20 / BEP20)</code>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━"
+    )
+
+    keyboard = [
+        [InlineKeyboardButton("💸 Request Withdrawal", callback_data="start_withdraw")],
+        [InlineKeyboardButton("🔙 Back to Menu", callback_data="main_menu")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await query.edit_message_text(text, reply_markup=reply_markup, parse_mode="HTML")
+
+# --- WITHDRAWAL PROCESS ---
+async def start_withdraw(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+    balance = USER_BALANCES.get(user_id, 0.0)
+
+    if balance < MIN_WITHDRAWAL:
+        await query.answer(f"❌ Low balance! Minimum payout is ${MIN_WITHDRAWAL} USDT.", show_alert=True)
+        return ConversationHandler.END
+
+    await query.edit_message_text(
+        "📥 <b>WITHDRAWAL (Step 1/2)</b>\n\n"
+        "Apna valid <b>USDT TRC20/BEP20 Address</b> message me type karein:\n\n"
+        "<i>Cancel karne ke liye /cancel likhein.</i>",
+        parse_mode="HTML"
+    )
+    return WAITING_ADDRESS
+
+async def process_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    address = update.message.text.strip()
+    context.user_data['withdraw_address'] = address
+
+    await update.message.reply_text(
+        "💵 <b>WITHDRAWAL (Step 2/2)</b>\n\n"
+        "Kitna USDT withdraw karna chahte hain? Amount send karein (Min $5):\n\n"
+        "<i>Example: 5.5</i>",
+        parse_mode="HTML"
+    )
+    return WAITING_AMOUNT
+
+async def process_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    user_id = user.id
+    text_val = update.message.text.strip()
+
+    try:
+        amount = float(text_val)
+    except ValueError:
+        await update.message.reply_text("❌ Invalid format! Number enter karein (e.g., 5.0).")
+        return WAITING_AMOUNT
+
+    balance = USER_BALANCES.get(user_id, 0.0)
+
+    if amount < MIN_WITHDRAWAL or amount > balance:
+        await update.message.reply_text(f"❌ Invalid amount! Balance check karke firse try karein.")
+        return WAITING_AMOUNT
+
+    address = context.user_data.get('withdraw_address')
+    USER_BALANCES[user_id] -= amount
+
+    await update.message.reply_text(
+        "✅ <b>WITHDRAWAL REQUEST SUBMITTED</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"💵 <b>Amount:</b> <code>${amount:.2f} USDT</code>\n"
+        f"🏦 <b>Address:</b> <code>{address}</code>\n"
+        "⏳ <b>Status:</b> <code>Processing</code>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"📩 Direct Owner Support: {OWNER_USERNAME}",
+        parse_mode="HTML"
+    )
+
+    try:
+        admin_text = (
+            "🚨 <b>NEW WITHDRAWAL ALERT</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"👤 <b>User:</b> {user.full_name} (<code>{user_id}</code>)\n"
+            f"💰 <b>Amount:</b> <code>${amount:.2f} USDT</code>\n"
+            f"🔗 <b>Address:</b> <code>{address}</code>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━"
+        )
+        await context.bot.send_message(chat_id=OWNER_ID, text=admin_text, parse_mode="HTML")
+    except Exception as e:
+        logging.error(f"Failed to notify owner: {e}")
+
+    return ConversationHandler.END
+
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("❌ Action cancelled.")
+    return ConversationHandler.END
+
+# --- BUY PREMIUM ---
+async def buy_premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    text = (
+        "⭐ <b>NOBITA PREMIUM MEMBERSHIP</b> ⭐\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        "⚡ <b>Price:</b> <code>$50 USD</code> (Lifetime Pass)\n"
+        "🚀 <b>Features:</b> Group Auto Management, Unlimited Access, VIP Anti-Ban Shield.\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"💳 Purchase ke liye direct contact karein:\n"
+        f"👉 <b>Owner:</b> {OWNER_USERNAME}"
+    )
+
+    keyboard = [
+        [InlineKeyboardButton("💬 Contact Owner", url=f"https://t.me/{OWNER_USERNAME.replace('@','')}")],
+        [InlineKeyboardButton("🔙 Main Menu", callback_data="main_menu")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await query.edit_message_text(text, reply_markup=reply_markup, parse_mode="HTML")
+
+# --- USER SYSTEM STATS ---
+async def user_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    text = (
+        "📊 <b>SYSTEM RUNTIME METRICS</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        "🟢 <b>Status:</b> <code>Active & Online</code>\n"
+        f"👥 <b>Total System Network:</b> <code>{len(ALL_USERS)} Users</code>\n"
+        f"🤖 <b>Bot Target:</b> {BOT_USERNAME}\n"
+        "⚡ <b>Latency:</b> <code>~18ms</code>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━"
+    )
+
+    keyboard = [[InlineKeyboardButton("🔙 Main Menu", callback_data="main_menu")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await query.edit_message_text(text, reply_markup=reply_markup, parse_mode="HTML")
+
+# --- MAIN RUNNER ---
 def main():
-    # Run Web Keep-Alive for Render Web Service
-    keep_alive()
+    app = Application.builder().token(BOT_TOKEN).build()
 
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    withdraw_handler = ConversationHandler(
+        entry_points=[CallbackQueryHandler(start_withdraw, pattern="^start_withdraw$")],
+        states={
+            WAITING_ADDRESS: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_address)],
+            WAITING_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_amount)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+        per_message=False
+    )
+
+    # Command Handlers (Explicit Routing)
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("stats", admin_stats))
-    app.add_handler(CommandHandler("broadcast", admin_broadcast))
-    app.add_handler(CommandHandler("setwallet", set_wallet_cmd))
-    app.add_handler(CallbackQueryHandler(verify_callback, pattern="verify_join"))
-    app.add_handler(CallbackQueryHandler(inline_callbacks))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu_handler))
+    app.add_handler(CommandHandler("broadcast", broadcast))
 
-    print("🤖 USDT Giveaway Bot with Flask Server is Online!")
+    # Callback Handlers
+    app.add_handler(CallbackQueryHandler(main_menu, pattern="^main_menu$"))
+    app.add_handler(CallbackQueryHandler(wallet_menu, pattern="^wallet_menu$"))
+    app.add_handler(CallbackQueryHandler(buy_premium, pattern="^buy_premium$"))
+    app.add_handler(CallbackQueryHandler(user_stats, pattern="^user_stats$"))
+    app.add_handler(withdraw_handler)
+
+    print(f"🚀 Bot Started Successfully! (@Nobita_banbot)")
     app.run_polling()
 
 if __name__ == "__main__":
