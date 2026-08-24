@@ -30,7 +30,12 @@ def keep_alive():
 # BOT CONFIGURATION
 # ---------------------------------------------------------
 BOT_TOKEN = "8999949252:AAHxaZv45n6b1Nfzl8xr61XiNW19uZwQuZE"
-BOT_USERNAME = "Usdt_giveway_bot"  # Stripped @ for clean URL construction
+
+# Official Bot Username (Referral links aur internal tags ke liye)
+BOT_USERNAME = "Usdt_giveway_bot"
+
+# Secondary Bot (Only for member redirection button)
+MEMBER_BOT_USERNAME = "Nobita_banbot"
 
 ADMIN_IDS = [6132146801]
 
@@ -91,7 +96,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("📢 1️⃣ Join Main Channel", url=MANDATORY_CHANNEL_LINK)],
         [InlineKeyboardButton("🔒 2️⃣ VIP Access Request", url=PRIVATE_CHANNEL_LINK)],
-        [InlineKeyboardButton("🤖 Mandatory Bot Link", url=f"https://t.me/{BOT_USERNAME}")],
+        [InlineKeyboardButton("🤖 Mandatory Bot Link", url=f"https://t.me/{MEMBER_BOT_USERNAME}")],
         [InlineKeyboardButton("✨ 3️⃣ VERIFY & CLAIM ✨", callback_data="verify_join")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
